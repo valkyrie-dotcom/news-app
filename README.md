@@ -5,7 +5,7 @@ articles for approval and posting by editors. Readers subscribe to
 publishers and journalists to get new articles by email. A RESTful API with
 token authentication serves the articles to third-party clients.
 
-GitHub repository: https://github.com/valkyrie-dotcom/news-app.git
+GitHub repository: https://github.com/valkyrie-dotcom/news-app
 
 ## Features
 
