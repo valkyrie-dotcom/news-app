@@ -15,10 +15,10 @@ consistency. This will also help ensure minimal rearchitecting and
 troubleshooting.
 
 **All users**
-1. Register as a Reader or a Journalist, log in and log out. Users confirm
-   their password when registering, and each email address can only be used
-   for one account. Editors and publishers are set up by an administrator in
-   the Django admin.
+1. Register as a Reader, a Journalist or an Editor, log in and log out.
+   Users confirm their password when registering, and each email address can
+   only be used for one account. Publishers, and the editors and journalists
+   who belong to them, are set up by an administrator in the Django admin.
 2. View approved articles and newsletters.
 
 **Readers**
@@ -99,7 +99,7 @@ the user's role. As well as any success or error messages.
 
 | Page | Who | Contents |
 |------|-----|----------|
-| Login, Register | Everyone | Simple forms. Register has Reader or Journalist, and a confirm password field. |
+| Login, Register | Everyone | Simple forms. Register has Reader, Journalist or Editor, and a confirm password field. |
 | Articles | Everyone | Approved articles. With author, publisher and date. |
 | Article | Everyone | Full article. Edit and delete links for author and editors. |
 | Newsletters, Newsletter | Everyone | Newsletters and approved articles. |

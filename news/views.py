@@ -46,7 +46,7 @@ def login_user(request):
 
 
 def register_user(request):
-    """Register a new Reader or Journalist."""
+    """Register a new Reader, Journalist or Editor."""
     if request.method == "POST":
         username = request.POST.get("username", "").strip()
         email = request.POST.get("email", "").strip()
@@ -66,8 +66,8 @@ def register_user(request):
         # to the right person
         elif User.objects.filter(email__iexact=email).exists():
             error = "An account with that email address already exists."
-        elif role not in (User.READER, User.JOURNALIST):
-            error = "Please choose Reader or Journalist."
+        elif role not in (User.READER, User.JOURNALIST, User.EDITOR):
+            error = "Please choose Reader, Journalist or Editor."
         elif not password:
             error = "Please enter a password."
         elif password != password_conf:

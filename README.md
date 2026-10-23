@@ -141,7 +141,7 @@ with their permissions.
 python manage.py createsuperuser
 ```
 
-You need this to set up editors and publishers (see below).
+You need this to set up publishers (see below).
 
 ## Running the project
 
@@ -152,11 +152,11 @@ python manage.py runserver
 Open http://127.0.0.1:8000/ in your browser. Press `Ctrl + C` in the
 terminal to stop the server.
 
-Readers and journalists can register on the site. To set up editors and
-publishers, log in to http://127.0.0.1:8000/admin/ with your admin user:
-
-1. Create a user (or edit one) and set their **Role** to Editor.
-2. Create a **Publisher**, and choose its editors and journalists.
+Readers, journalists and editors register on the site and choose their
+role. To set up a publisher, log in to http://127.0.0.1:8000/admin/ with
+your admin user, create a **Publisher**, and choose its editors and
+journalists. Journalists can only write articles for publishers they belong
+to.
 
 If no email details are set in `.env`, emails (approved articles sent to
 subscribers) are printed in the terminal.
