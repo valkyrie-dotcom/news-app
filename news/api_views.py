@@ -8,16 +8,15 @@ from rest_framework import serializers, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .access import (
+    can_manage_article, can_view_article, can_view_newsletter,
+    listed_articles, listed_newsletters,
+)
 from .models import Article, Newsletter, User
 from .serializers import ArticleSerializer, NewsletterSerializer
-from .utils import approve_article
+from .utils import approve_article, update_article_status
 
 logger = logging.getLogger(__name__)
-
-
-def can_manage(user, article):
-    """Editors can manage any article, journalists only their own."""
-    return user.role == User.EDITOR or article.author == user
 
 
 def may_use_publisher(user, publisher):
@@ -34,9 +33,10 @@ def error(message, code):
 
 @api_view(["GET", "POST"])
 def article_list(request):
-    """GET: all approved articles. POST: create an article (journalists)."""
+    """GET: approved articles (editors only get their publishers').
+    POST: create an article (journalists)."""
     if request.method == "GET":
-        articles = Article.objects.filter(approved=True)
+        articles = listed_articles(request.user)
         return Response(ArticleSerializer(articles, many=True).data)
 
     user = request.user
@@ -51,9 +51,12 @@ def article_list(request):
         return error("You are not a journalist for this publisher.",
                      status.HTTP_403_FORBIDDEN)
 
-    # New articles always wait for an editor's approval
-    serializer.save(author=user)
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+    article = serializer.save(author=user)
+    # Independent articles go live; publisher articles wait for an
+    # editor of that publisher
+    update_article_status(article, user)
+    return Response(ArticleSerializer(article).data,
+                    status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET"])
@@ -74,21 +77,23 @@ def subscribed_articles(request):
 
 @api_view(["GET", "PUT", "DELETE"])
 def article_detail(request, pk):
-    """GET one article. PUT updates it, DELETE removes it (editors, or the
-    journalist who wrote it). Only editors can approve with PUT."""
+    """GET one article. PUT updates it, DELETE removes it (editors of
+    its publisher, or journalist who wrote it). Only editors can
+    approve with PUT, and they cannot change publisher."""
     article = get_object_or_404(Article, pk=pk)
     user = request.user
 
+    # Editors only see their publishers' articles, and unapproved articles
+    # are hidden from everyone but those editors and the author
+    if not can_view_article(user, article):
+        return error("Article not found.", status.HTTP_404_NOT_FOUND)
+
     if request.method == "GET":
-        # Unapproved articles are hidden from everyone but editors and
-        # their author
-        if not article.approved and not can_manage(user, article):
-            return error("Article not found.", status.HTTP_404_NOT_FOUND)
         return Response(ArticleSerializer(article).data)
 
     if request.method == "DELETE":
         if not user.has_perm("news.delete_article") or \
-                not can_manage(user, article):
+                not can_manage_article(user, article):
             return error("You cannot delete this article.",
                          status.HTTP_403_FORBIDDEN)
         article.delete()
@@ -96,8 +101,11 @@ def article_detail(request, pk):
 
     # PUT
     if not user.has_perm("news.change_article") or \
-            not can_manage(user, article):
+            not can_manage_article(user, article):
         return error("You cannot update this article.",
+                     status.HTTP_403_FORBIDDEN)
+    if user.role == User.EDITOR and "publisher" in request.data:
+        return error("Editors cannot change an article's publisher.",
                      status.HTTP_403_FORBIDDEN)
 
     approve = None
@@ -119,9 +127,14 @@ def article_detail(request, pk):
     if not may_use_publisher(user, serializer.validated_data.get("publisher")):
         return error("You are not a journalist for this publisher.",
                      status.HTTP_403_FORBIDDEN)
+    old_publisher_id = article.publisher_id
     article = serializer.save()
 
-    if approve is True and not article.approved:
+    if user.role == User.JOURNALIST:
+        # Publishes independent articles, or sends article moved under
+        # a publisher back for approval
+        update_article_status(article, user, old_publisher_id)
+    elif approve is True and not article.approved:
         # Approves, emails subscribers and posts to /api/approved/
         approve_article(article, user)
     elif approve is False and article.approved:
@@ -132,10 +145,11 @@ def article_detail(request, pk):
 
 @api_view(["POST"])
 def approved_log(request):
-    """Log an approved article. Called after an editor approves one."""
-    if request.user.role != User.EDITOR:
-        return error("Only editors can log approved articles.",
-                     status.HTTP_403_FORBIDDEN)
+    """Log an approved article. Called after an editor approves one, or a
+    journalist publishes an independent one."""
+    if request.user.role not in (User.EDITOR, User.JOURNALIST):
+        return error("Only editors and journalists can log approved "
+                     "articles.", status.HTTP_403_FORBIDDEN)
     title = request.data.get("title")
     if not title:
         return error("The article title is required.",
@@ -147,8 +161,9 @@ def approved_log(request):
 
 @api_view(["GET"])
 def newsletter_list(request):
-    """All newsletters."""
-    newsletters = Newsletter.objects.all()
+    """All newsletters (editors only get those written by journalists of
+    their publishers)."""
+    newsletters = listed_newsletters(request.user)
     return Response(NewsletterSerializer(newsletters, many=True).data)
 
 
@@ -156,4 +171,6 @@ def newsletter_list(request):
 def newsletter_detail(request, pk):
     """One newsletter."""
     newsletter = get_object_or_404(Newsletter, pk=pk)
+    if not can_view_newsletter(request.user, newsletter):
+        return error("Newsletter not found.", status.HTTP_404_NOT_FOUND)
     return Response(NewsletterSerializer(newsletter).data)

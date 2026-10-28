@@ -53,15 +53,17 @@ def email_subscribers(article):
     return len(recipients)
 
 
-def post_to_approved_api(article, editor):
+def post_to_approved_api(article, user):
     """Send the approved article to our own /api/approved/ endpoint.
 
-    Return the response status code, or None if the request failed.
+    The request uses the API token of the user who published the article:
+    the editor, or the journalist for an independent article. Return the
+    response status code, or None if the request failed.
     """
     # Imported here to avoid a circular import with serializers.py
     from .serializers import ArticleSerializer
 
-    token, created = Token.objects.get_or_create(user=editor)
+    token, created = Token.objects.get_or_create(user=user)
     try:
         response = requests.post(
             settings.APPROVED_API_URL,
@@ -75,13 +77,33 @@ def post_to_approved_api(article, editor):
     return response.status_code
 
 
-def approve_article(article, editor):
+def approve_article(article, user):
     """Approve an article, email its subscribers and log it to the API.
 
+    Editors approve their publishers' articles. Independent articles are
+    approved when the journalist saves them (see update_article_status).
     Return how many subscribers were emailed.
     """
     article.approved = True
     article.save()
     sent = email_subscribers(article)
-    post_to_approved_api(article, editor)
+    post_to_approved_api(article, user)
     return sent
+
+
+def update_article_status(article, user, old_publisher_id=None):
+    """Publish an independent article as soon as its journalist saves it.
+
+    An article with no publisher is the journalist's own, so it goes live
+    when it is saved. An article that is moved under a publisher waits for
+    that publisher's editors again. Return how many subscribers were
+    emailed (0 if nothing was published).
+    """
+    if article.publisher_id is None:
+        if not article.approved:
+            return approve_article(article, user)
+    elif article.publisher_id != old_publisher_id and article.approved:
+        # Moved under a (different) publisher, so its editors must approve
+        article.approved = False
+        article.save()
+    return 0
